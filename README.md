@@ -1,3 +1,10 @@
+## Use official library over here : https://github.com/siddontang/go-mysql-elasticsearch
+This is just a fork to make it 
++ clustrix compatible 
++ some custom changes to support upserts 
++ soft "deletes" (remove properties instead of doc.. handy when your data is scatered among multiple tables, 
+and you don't want that a delete on one of these tables would delete the main document). 
+
 go-mysql-elasticsearch is a service syncing your MySQL data into Elasticsearch automatically.
 
 It uses `mysqldump` to fetch the origin data at first, then syncs data incrementally with binlog.
