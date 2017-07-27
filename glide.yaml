@@ -1,4 +1,4 @@
-package: github.com/siddontang/go-mysql-elasticsearch
+package: github.com/jrots/go-mysql-elasticsearch
 import:
 - package: github.com/BurntSushi/toml
   version: 056c9bc7be7190eaa7715723883caffa5f8fa3e4
@@ -6,7 +6,7 @@ import:
   version: 6f54ff6318409d31ff16261533ce2c8381a4fd5d
 - package: github.com/satori/go.uuid
   version: ^1.1.0
-- package: github.com/siddontang/go-mysql
+- package: github.com/jrots/go-mysql
   version: 96156dbfdf7556c67eb0889781c072f93295078d
   subpackages:
   - canal

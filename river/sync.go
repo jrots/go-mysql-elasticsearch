@@ -10,11 +10,11 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/siddontang/go-mysql-elasticsearch/elastic"
-	"github.com/siddontang/go-mysql/canal"
-	"github.com/siddontang/go-mysql/mysql"
-	"github.com/siddontang/go-mysql/replication"
-	"github.com/siddontang/go-mysql/schema"
+	"github.com/jrots/go-mysql-elasticsearch/elastic"
+	"github.com/jrots/go-mysql/canal"
+	"github.com/jrots/go-mysql/mysql"
+	"github.com/jrots/go-mysql/replication"
+	"github.com/jrots/go-mysql/schema"
 )
 
 const (

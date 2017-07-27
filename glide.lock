@@ -17,7 +17,7 @@ imports:
   - hack
   - ioutil2
   - sync2
-- name: github.com/siddontang/go-mysql
+- name: github.com/jrots/go-mysql
   version: 96156dbfdf7556c67eb0889781c072f93295078d
   subpackages:
   - canal

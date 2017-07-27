@@ -1,7 +1,7 @@
 package river
 
 import (
-	"github.com/siddontang/go-mysql/schema"
+	"github.com/jrots/go-mysql/schema"
 )
 
 // If you want to sync MySQL data into elasticsearch, you must set a rule to let use know how to do it.

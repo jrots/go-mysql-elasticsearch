@@ -8,8 +8,8 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/siddontang/go-mysql-elasticsearch/elastic"
-	"github.com/siddontang/go-mysql/client"
+	"github.com/jrots/go-mysql-elasticsearch/elastic"
+	"github.com/jrots/go-mysql/client"
 )
 
 var my_addr = flag.String("my_addr", "127.0.0.1:3306", "MySQL addr")

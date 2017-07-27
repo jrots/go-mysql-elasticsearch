@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/juju/errors"
-	"github.com/siddontang/go-mysql/mysql"
+	"github.com/jrots/go-mysql/mysql"
 )
 
 var ErrTableNotExist = errors.New("table is not exist")

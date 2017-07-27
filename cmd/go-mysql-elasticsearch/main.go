@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"syscall"
 
+	"github.com/jrots/go-mysql-elasticsearch/river"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/siddontang/go-mysql-elasticsearch/river"
 )
 
 var configFile = flag.String("config", "./etc/river.toml", "go-mysql-elasticsearch config file")

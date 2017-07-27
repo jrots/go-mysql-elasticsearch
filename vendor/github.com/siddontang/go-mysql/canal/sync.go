@@ -6,9 +6,9 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/siddontang/go-mysql/mysql"
-	"github.com/siddontang/go-mysql/replication"
-	"github.com/siddontang/go-mysql/schema"
+	"github.com/jrots/go-mysql/mysql"
+	"github.com/jrots/go-mysql/replication"
+	"github.com/jrots/go-mysql/schema"
 )
 
 var (
