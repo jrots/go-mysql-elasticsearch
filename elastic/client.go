@@ -101,7 +101,28 @@ func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
 
 	switch r.Action {
 	case ActionDelete:
-		//nothing to do
+		//ctx._source.remove(\"name_of_field\");
+		var delScript bytes.Buffer
+		for k := range r.Data {
+			delScript.WriteString("ctx._source.remove(\"")
+			delScript.WriteString(k)
+			delScript.WriteString("\");")
+		}
+		script := map[string]interface{}{
+			"script":
+				map[string]interface{}{
+					"inline" : delScript.String(),
+					"lang" : "painless",
+				},
+			,
+		}
+		data, err = json.Marshal(script)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		buf.Write(data)
+		buf.WriteByte('\n')
 	case ActionUpdate:
 		doc := map[string]interface{}{
 			"doc": r.Data,

@@ -174,6 +174,7 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 		req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: id, Parent: parentID}
 
 		if action == canal.DeleteAction {
+			r.makeInsertReqData(req, rule, values)
 			req.Action = elastic.ActionDelete
 			r.st.DeleteNum.Add(1)
 		} else {
