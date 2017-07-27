@@ -67,11 +67,12 @@ func (h *eventHandler) OnRow(e *canal.RowsEvent) error {
 	var err error
 	switch e.Action {
 	case canal.InsertAction:
-		reqs, err = h.r.makeInsertRequest(rule, e.Rows)
-	case canal.DeleteAction:
-		reqs, err = h.r.makeDeleteRequest(rule, e.Rows)
 	case canal.UpdateAction:
 		reqs, err = h.r.makeUpdateRequest(rule, e.Rows)
+	case canal.DeleteAction:
+		reqs, err = h.r.makeDeleteRequest(rule, e.Rows)
+	//case canal.UpdateAction:
+	//	reqs, err = h.r.makeUpdateRequest(rule, e.Rows)
 	default:
 		err = errors.Errorf("invalid rows action %s", e.Action)
 	}
@@ -209,37 +210,11 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 			return nil, errors.Trace(err)
 		}
 
-		afterID, err := r.getDocID(rule, rows[i+1])
+		// Simplify .. no support for changing PK of rows as this would complicate things too much
+		req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: beforeID, Parent: ""}
 
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		beforeParentID, afterParentID := "", ""
-		if len(rule.Parent) > 0 {
-			if beforeParentID, err = r.getParentID(rule, rows[i], rule.Parent); err != nil {
-				return nil, errors.Trace(err)
-			}
-			if afterParentID, err = r.getParentID(rule, rows[i+1], rule.Parent); err != nil {
-				return nil, errors.Trace(err)
-			}
-		}
-
-		req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: beforeID, Parent: beforeParentID}
-
-		if beforeID != afterID || beforeParentID != afterParentID {
-			req.Action = elastic.ActionDelete
-			reqs = append(reqs, req)
-
-			req = &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: afterID, Parent: afterParentID}
-			r.makeInsertReqData(req, rule, rows[i+1])
-
-			r.st.DeleteNum.Add(1)
-			r.st.InsertNum.Add(1)
-		} else {
-			r.makeUpdateReqData(req, rule, rows[i], rows[i+1])
-			r.st.UpdateNum.Add(1)
-		}
+		r.makeUpdateReqData(req, rule, rows[i], rows[i+1])
+		r.st.UpdateNum.Add(1)
 
 		reqs = append(reqs, req)
 	}

@@ -105,6 +105,7 @@ func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
 	case ActionUpdate:
 		doc := map[string]interface{}{
 			"doc": r.Data,
+			"doc_as_upsert": true,
 		}
 		data, err = json.Marshal(doc)
 		if err != nil {
