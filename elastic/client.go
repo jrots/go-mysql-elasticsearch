@@ -89,7 +89,8 @@ func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
 		metaData["_parent"] = r.Parent
 	}
 
-	meta[r.Action] = metaData
+	//meta[r.Action] = metaData
+	meta["update"] = metaData
 
 	data, err := json.Marshal(meta)
 	if err != nil {
