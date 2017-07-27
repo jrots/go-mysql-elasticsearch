@@ -62,17 +62,15 @@ func (h *eventHandler) OnRow(e *canal.RowsEvent) error {
 	if !ok {
 		return nil
 	}
-
 	var reqs []*elastic.BulkRequest
 	var err error
 	switch e.Action {
 	case canal.InsertAction:
-	case canal.UpdateAction:
-		reqs, err = h.r.makeUpdateRequest(rule, e.Rows)
+		reqs, err = h.r.makeInsertRequest(rule, e.Rows)
 	case canal.DeleteAction:
 		reqs, err = h.r.makeDeleteRequest(rule, e.Rows)
-	//case canal.UpdateAction:
-	//	reqs, err = h.r.makeUpdateRequest(rule, e.Rows)
+	case canal.UpdateAction:
+		reqs, err = h.r.makeUpdateRequest(rule, e.Rows)
 	default:
 		err = errors.Errorf("invalid rows action %s", e.Action)
 	}
@@ -302,7 +300,7 @@ func (r *River) getFieldParts(k string, v string) (string, string, string) {
 
 func (r *River) makeInsertReqData(req *elastic.BulkRequest, rule *Rule, values []interface{}) {
 	req.Data = make(map[string]interface{}, len(values))
-	req.Action = elastic.ActionIndex
+	req.Action = elastic.ActionUpdate
 
 	for i, c := range rule.TableInfo.Columns {
 		if !rule.CheckFilter(c.Name) {
