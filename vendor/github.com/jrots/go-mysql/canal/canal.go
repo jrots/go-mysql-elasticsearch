@@ -246,7 +246,7 @@ func (c *Canal) checkBinlogRowFormat() error {
 	res, err := c.Execute(`SHOW GLOBAL VARIABLES LIKE "binlog_format";`)
 	if err != nil {
 		return errors.Trace(err)
-	} else if f, _ := res.GetString(0, 1); f != "ROW" {
+	} else if f, _ := res.GetString(0, 1); (f != "ROW" && f != "DEFAULT" ){
 		return errors.Errorf("binlog must ROW format, but %s now", f)
 	}
 

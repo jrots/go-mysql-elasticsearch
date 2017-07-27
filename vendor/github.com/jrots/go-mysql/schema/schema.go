@@ -215,7 +215,7 @@ func (ta *Table) fetchIndexes(conn mysql.Executer) error {
 		return nil
 	}
 
-	pkIndex := ta.Indexes[0]
+	pkIndex := ta.Indexes[len(ta.Indexes) - 1]
 	if pkIndex.Name != "PRIMARY" {
 		return nil
 	}
