@@ -25,6 +25,8 @@ const (
 
 const (
 	fieldTypeList = "list"
+	fieldTypeGeoLat = "geo_lat"
+	fieldTypeGeoLon = "geo_lon"
 )
 
 type posSaver struct {
@@ -319,6 +321,19 @@ func (r *River) makeInsertReqData(req *elastic.BulkRequest, rule *Rule, values [
 					} else {
 						req.Data[elastic] = v
 					}
+				} else if (fieldType == fieldTypeGeoLat || fieldType == fieldTypeGeoLon ){
+					if _, ok := req.Data[elastic]; !ok {
+						req.Data[elastic] = make(map[string]interface{})
+					}
+					md, ok := req.Data[elastic].(map[string]interface{})
+					if (ok){
+						if (fieldType == fieldTypeGeoLat) {
+							md["lat"] = v
+						} else {
+							md["lon"] = v
+						}
+						req.Data[elastic] = md
+					}
 				} else {
 					req.Data[elastic] = v
 				}
@@ -353,7 +368,20 @@ func (r *River) makeUpdateReqData(req *elastic.BulkRequest, rule *Rule,
 				// has custom field mapping
 				v := r.makeReqColumnData(&c, afterValues[i])
 				str, ok := v.(string)
-				if ok == false {
+				if (fieldType == fieldTypeGeoLat || fieldType == fieldTypeGeoLon ){
+					if _, ok := req.Data[elastic]; !ok {
+						req.Data[elastic] = make(map[string]interface{})
+					}
+					md, ok := req.Data[elastic].(map[string]interface{})
+					if (ok){
+						if (fieldType == fieldTypeGeoLat) {
+							md["lat"] = v
+						} else {
+							md["lon"] = v
+						}
+						req.Data[elastic] = md
+					}
+				} else if ok == false {
 					req.Data[elastic] = v
 				} else {
 					if fieldType == fieldTypeList {
