@@ -97,6 +97,10 @@ func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
 		return errors.Trace(err)
 	}
 
+	if (r.Action == ActionUpdate && len(r.Data) == 0) {
+		return nil
+	}
+
 	buf.Write(data)
 	buf.WriteByte('\n')
 
