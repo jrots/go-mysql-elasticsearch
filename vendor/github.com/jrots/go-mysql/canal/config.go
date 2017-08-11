@@ -40,6 +40,7 @@ type Config struct {
 	Charset  string `toml:"charset"`
 	ServerID uint32 `toml:"server_id"`
 	Flavor   string `toml:"flavor"`
+	BinlogName string `toml:"binlogname"`
 
 	Dump DumpConfig `toml:"dump"`
 }

@@ -134,7 +134,21 @@ func (c *Canal) WaitUntilPos(pos mysql.Position, timeout time.Duration) error {
 	return nil
 }
 
+func (c *Canal) GetMasterPosByName(binlogname string) (mysql.Position, error) {
+
+	rr, err := c.Execute("SHOW MASTER STATUS '"+binlogname+"'")
+	if err != nil {
+		return mysql.Position{"", 0}, errors.Trace(err)
+	}
+
+	name, _ := rr.GetString(0, 0)
+	pos, _ := rr.GetInt(0, 1)
+
+	return mysql.Position{name, uint32(pos)}, nil
+}
+
 func (c *Canal) GetMasterPos() (mysql.Position, error) {
+
 	rr, err := c.Execute("SHOW MASTER STATUS")
 	if err != nil {
 		return mysql.Position{"", 0}, errors.Trace(err)
@@ -147,7 +161,16 @@ func (c *Canal) GetMasterPos() (mysql.Position, error) {
 }
 
 func (c *Canal) CatchMasterPos(timeout time.Duration) error {
-	pos, err := c.GetMasterPos()
+
+	var err error
+	var pos mysql.Position
+
+	if c.cfg.BinlogName != "" {
+		pos, err = c.GetMasterPosByName(c.cfg.BinlogName)
+	} else {
+		pos, err = c.GetMasterPos()
+	}
+
 	if err != nil {
 		return errors.Trace(err)
 	}

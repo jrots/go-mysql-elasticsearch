@@ -37,6 +37,9 @@ type BinlogSyncerConfig struct {
 	// Password is for MySQL password.
 	Password string
 
+	// Name of the binlog
+	BinlogName string
+
 	// Localhost is local hostname if register salve.
 	// If not set, use os.Hostname() instead.
 	Localhost string

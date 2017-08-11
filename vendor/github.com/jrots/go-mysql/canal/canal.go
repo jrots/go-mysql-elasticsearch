@@ -267,6 +267,7 @@ func (c *Canal) prepareSyncer() error {
 	cfg := replication.BinlogSyncerConfig{
 		ServerID: c.cfg.ServerID,
 		Flavor:   c.cfg.Flavor,
+		BinlogName: c.cfg.BinlogName,
 		Host:     seps[0],
 		Port:     uint16(port),
 		User:     c.cfg.User,

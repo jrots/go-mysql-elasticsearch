@@ -107,7 +107,14 @@ func (c *Canal) tryDump() error {
 	h := &dumpParseHandler{c: c}
 
 	if c.cfg.Dump.SkipMasterData {
-		pos, err := c.GetMasterPos()
+		var err error
+
+		if c.cfg.BinlogName != "" {
+			pos, err = c.GetMasterPosByName(c.cfg.BinlogName)
+		} else {
+			pos, err = c.GetMasterPos()
+		}
+
 		if err != nil {
 			return errors.Trace(err)
 		}
