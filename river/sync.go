@@ -297,6 +297,36 @@ func (r *River) makeReqColumnData(col *schema.TableColumn, value interface{}) in
 		case []byte:
 			return string(value[:])
 		}
+	case schema.TYPE_DATETIME:
+	case schema.TYPE_TIMESTAMP:
+		var stringVal string
+		switch value := value.(type) {
+		case []byte:
+			stringVal = string(value[:])
+		case string:
+			stringVal = value
+		default:
+			return value
+		}
+		if (stringVal == "0000-00-00 00:00:00") {
+			return nil
+ 		} else {
+			return stringVal
+		}
+	case schema.TYPE_DATE:
+		var stringVal string
+		switch value := value.(type) {
+		case []byte:
+			stringVal = string(value[:])
+		case string:
+			stringVal = value
+		default:
+			return value
+		}
+		if (stringVal == "0000-00-00") {
+			return nil
+ 		}
+		return stringVal
 	case schema.TYPE_JSON:
 		var f interface{}
 		var err error
@@ -345,6 +375,9 @@ func (r *River) makeInsertReqData(req *elastic.BulkRequest, rule *Rule, values [
 			if mysql == c.Name {
 				mapped = true
 				v := r.makeReqColumnData(&c, values[i])
+				if v == nil {
+					continue
+				}
 				if fieldType == fieldTypeList {
 					if str, ok := v.(string); ok {
 						req.Data[elastic] = strings.Split(str, ",")
@@ -370,7 +403,10 @@ func (r *River) makeInsertReqData(req *elastic.BulkRequest, rule *Rule, values [
 			}
 		}
 		if mapped == false {
-			req.Data[c.Name] = r.makeReqColumnData(&c, values[i])
+			v := r.makeReqColumnData(&c, values[i])
+			if (v != nil) {
+				req.Data[c.Name] = v
+			}
 		}
 	}
 }
@@ -397,6 +433,9 @@ func (r *River) makeUpdateReqData(req *elastic.BulkRequest, rule *Rule,
 				mapped = true
 				// has custom field mapping
 				v := r.makeReqColumnData(&c, afterValues[i])
+				if v == nil {
+					continue
+				}
 				str, ok := v.(string)
 				if (fieldType == fieldTypeGeoLat || fieldType == fieldTypeGeoLon ){
 					if _, ok := req.Data[elastic]; !ok {
@@ -423,7 +462,10 @@ func (r *River) makeUpdateReqData(req *elastic.BulkRequest, rule *Rule,
 			}
 		}
 		if mapped == false {
-			req.Data[c.Name] = r.makeReqColumnData(&c, afterValues[i])
+			v := r.makeReqColumnData(&c, afterValues[i])
+			if (v != nil) {
+				req.Data[c.Name] = v
+			}
 		}
 
 	}
