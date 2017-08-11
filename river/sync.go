@@ -175,6 +175,10 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 
 		req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: id, Parent: parentID}
 
+		if len(rule.IdPrefix) > 0 {
+			req.ID = rule.IdPrefix + ":" + req.ID
+		}
+
 		if len(rule.JoinField) > 0 {
 			req.JoinField = rule.JoinField
 		}
@@ -227,7 +231,12 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 			return nil, errors.Trace(err)
 		}
 		// Simplify .. no support for changing PK of rows as this would complicate things too much
-		req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: beforeID, Parent: ""}
+		req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: beforeID, Parent: beforeParentID}
+
+		if len(rule.IdPrefix) > 0 {
+			req.ID = rule.IdPrefix + ":" + req.ID
+		}
+
 		if len(rule.JoinField) > 0 {
 			req.JoinField = rule.JoinField
 		}
