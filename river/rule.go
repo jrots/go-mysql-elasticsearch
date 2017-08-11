@@ -13,6 +13,8 @@ type Rule struct {
 	Index  string `toml:"index"`
 	Type   string `toml:"type"`
 	Parent string `toml:"parent"`
+	JoinField string  `toml:"joinfield"`
+	JoinFieldName string  `toml:"joinfieldname"`
 	ID []string `toml:"id"`
 
 	// Default, a MySQL table field name is mapped to Elasticsearch field name.

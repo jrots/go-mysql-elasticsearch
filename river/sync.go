@@ -175,6 +175,12 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 
 		req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: id, Parent: parentID}
 
+		if len(rule.JoinField) > 0 {
+			req.JoinField = rule.JoinField
+		}
+		if len(rule.JoinFieldName) > 0 {
+			req.JoinFieldName = rule.JoinFieldName
+		}
 		if action == canal.DeleteAction {
 			r.makeInsertReqData(req, rule, values)
 			req.Action = elastic.ActionDelete
@@ -211,8 +217,23 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 			return nil, errors.Trace(err)
 		}
 
+		beforeParentID := ""
+		if len(rule.Parent) > 0 {
+			if beforeParentID, err = r.getParentID(rule, rows[i], rule.Parent); err != nil {
+				return nil, errors.Trace(err)
+			}
+		}
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 		// Simplify .. no support for changing PK of rows as this would complicate things too much
 		req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: beforeID, Parent: ""}
+		if len(rule.JoinField) > 0 {
+			req.JoinField = rule.JoinField
+		}
+		if len(rule.JoinFieldName) > 0 {
+			req.JoinFieldName = rule.JoinFieldName
+		}
 
 		r.makeUpdateReqData(req, rule, rows[i], rows[i+1])
 		r.st.UpdateNum.Add(1)

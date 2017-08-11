@@ -68,6 +68,8 @@ type BulkRequest struct {
 	Type   string
 	ID     string
 	Parent string
+	JoinField string
+	JoinFieldName string
 
 	Data map[string]interface{}
 }
@@ -85,7 +87,19 @@ func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
 	if len(r.ID) > 0 {
 		metaData["_id"] = r.ID
 	}
-	if len(r.Parent) > 0 {
+	if (len(r.JoinField) > 0) {
+		if (len(r.Parent) > 0) {
+			r.Data[r.JoinField] = map[string]interface{}{
+				"name" : r.JoinFieldName,
+				"parent" : r.Parent,
+			}
+			metaData["_routing"] = r.Parent
+		} else {
+			r.Data[r.JoinField] = map[string]interface{}{
+				"name" : r.JoinFieldName,
+			}
+		}
+	} else if (len(r.Parent) > 0) {
 		metaData["_parent"] = r.Parent
 	}
 
@@ -243,6 +257,7 @@ func (c *Client) DoBulk(url string, items []*BulkRequest) (*BulkResponse, error)
 	if len(data) > 0 {
 		err = json.Unmarshal(data, &ret)
 	}
+
 
 	return ret, errors.Trace(err)
 }
