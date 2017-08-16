@@ -185,12 +185,21 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 		if len(rule.JoinFieldName) > 0 {
 			req.JoinFieldName = rule.JoinFieldName
 		}
+		req.HardCrud = rule.HardCrud
+
 		if action == canal.DeleteAction {
-			r.makeInsertReqData(req, rule, values)
+			if !rule.HardCrud {
+				r.makeInsertReqData(req, rule, values)
+			}
 			req.Action = elastic.ActionDelete
 			r.st.DeleteNum.Add(1)
 		} else {
 			r.makeInsertReqData(req, rule, values)
+			if rule.HardCrud {
+				req.Action = elastic.ActionIndex
+			} else {
+				req.Action = elastic.ActionUpdate //upsert in this case (don't override complete document with the data)
+			}
 			r.st.InsertNum.Add(1)
 		}
 
@@ -231,7 +240,7 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 			return nil, errors.Trace(err)
 		}
 		// Simplify .. no support for changing PK of rows as this would complicate things too much
-		req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: beforeID, Parent: beforeParentID}
+		req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: beforeID, Parent: beforeParentID, HardCrud: rule.HardCrud}
 
 		if len(rule.IdPrefix) > 0 {
 			req.ID = rule.IdPrefix + ":" + req.ID
@@ -363,7 +372,9 @@ func (r *River) getFieldParts(k string, v string) (string, string, string) {
 
 func (r *River) makeInsertReqData(req *elastic.BulkRequest, rule *Rule, values []interface{}) {
 	req.Data = make(map[string]interface{}, len(values))
-	req.Action = elastic.ActionUpdate
+	if !rule.HardCrud {
+		req.Action = elastic.ActionUpdate
+	}
 
 	for i, c := range rule.TableInfo.Columns {
 		if !rule.CheckFilter(c.Name) {

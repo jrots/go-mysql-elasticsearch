@@ -16,6 +16,8 @@ type Rule struct {
 	JoinField string  `toml:"joinfield"`
 	JoinFieldName string  `toml:"joinfieldname"`
 	IdPrefix string `toml:"idprefix"`
+	HardCrud bool `toml:hardcrud` // one on one mapping of mysql to elastic (delete in mysql == delete in in elastic), by default ==> delete == delete of fields in elastic (not the whole document)
+
 	ID []string `toml:"id"`
 
 	// Default, a MySQL table field name is mapped to Elasticsearch field name.

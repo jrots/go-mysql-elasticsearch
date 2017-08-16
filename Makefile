@@ -3,7 +3,7 @@ all: build
 build: build-elasticsearch
 
 build-elasticsearch:
-	go build -o bin/go-mysql-elasticsearch ./cmd/go-mysql-elasticsearch
+	env GOOS=linux GOARCH=amd64 go build -o bin/go-mysql-elasticsearch ./cmd/go-mysql-elasticsearch
 
 test:
 	go test -timeout 1m --race ./...

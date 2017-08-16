@@ -71,6 +71,8 @@ type BulkRequest struct {
 	JoinField string
 	JoinFieldName string
 
+	HardCrud bool
+
 	Data map[string]interface{}
 }
 
@@ -103,8 +105,11 @@ func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
 		metaData["_parent"] = r.Parent
 	}
 
-	//meta[r.Action] = metaData
-	meta["update"] = metaData
+	if (r.HardCrud) {
+		meta[r.Action] = metaData
+	} else {
+		meta["update"] = metaData // all requests are update in this case
+	}
 
 	data, err := json.Marshal(meta)
 	if err != nil {
@@ -120,27 +125,29 @@ func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
 
 	switch r.Action {
 	case ActionDelete:
-		//ctx._source.remove(\"name_of_field\");
-		var del bytes.Buffer
-		for k := range r.Data {
-			del.WriteString("ctx._source.remove(\"")
-			del.WriteString(k)
-			del.WriteString("\");")
-		}
-		delScript := map[string]interface{}{
-					"inline" : del.String(),
-					"lang" : "painless",
-				}
-		script := map[string]interface{}{
-			"script": delScript,
-		}
-		data, err = json.Marshal(script)
-		if err != nil {
-			return errors.Trace(err)
-		}
+		if !r.HardCrud {
+			//ctx._source.remove(\"name_of_field\");
+			var del bytes.Buffer
+			for k := range r.Data {
+				del.WriteString("ctx._source.remove(\"")
+				del.WriteString(k)
+				del.WriteString("\");")
+			}
+			delScript := map[string]interface{}{
+						"inline" : del.String(),
+						"lang" : "painless",
+					}
+			script := map[string]interface{}{
+				"script": delScript,
+			}
+			data, err = json.Marshal(script)
+			if err != nil {
+				return errors.Trace(err)
+			}
 
-		buf.Write(data)
-		buf.WriteByte('\n')
+			buf.Write(data)
+			buf.WriteByte('\n')
+		}
 	case ActionUpdate:
 		doc := map[string]interface{}{
 			"doc": r.Data,
