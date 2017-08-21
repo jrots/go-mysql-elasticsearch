@@ -74,6 +74,8 @@ type BulkRequest struct {
 	HardCrud bool
 
 	Data map[string]interface{}
+	DeleteFields map[string]interface{}
+
 }
 
 func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
@@ -89,8 +91,8 @@ func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
 	if len(r.ID) > 0 {
 		metaData["_id"] = r.ID
 	}
-	if (len(r.JoinField) > 0) {
-		if (len(r.Parent) > 0) {
+	if len(r.JoinField) > 0 {
+		if len(r.Parent) > 0 {
 			r.Data[r.JoinField] = map[string]interface{}{
 				"name" : r.JoinFieldName,
 				"parent" : r.Parent,
@@ -101,32 +103,28 @@ func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
 				"name" : r.JoinFieldName,
 			}
 		}
-	} else if (len(r.Parent) > 0) {
+	} else if len(r.Parent) > 0 {
 		metaData["_parent"] = r.Parent
 	}
 
-	if (r.HardCrud) {
+	if r.HardCrud {
 		meta[r.Action] = metaData
 	} else {
 		meta["update"] = metaData // all requests are update in this case
 	}
-
 	data, err := json.Marshal(meta)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if r.Action != ActionUpdate || (len(r.Data) > 1 || (len(r.JoinField) == 0 && len(r.Data) == 1)) {
 
-	if (r.Action == ActionUpdate && len(r.Data) == 0) {
-		return nil
+		buf.Write(data)
+		buf.WriteByte('\n')
 	}
-
-	buf.Write(data)
-	buf.WriteByte('\n')
 
 	switch r.Action {
 	case ActionDelete:
 		if !r.HardCrud {
-			//ctx._source.remove(\"name_of_field\");
 			var del bytes.Buffer
 			for k := range r.Data {
 				del.WriteString("ctx._source.remove(\"")
@@ -140,6 +138,7 @@ func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
 			script := map[string]interface{}{
 				"script": delScript,
 			}
+
 			data, err = json.Marshal(script)
 			if err != nil {
 				return errors.Trace(err)
@@ -149,17 +148,37 @@ func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
 			buf.WriteByte('\n')
 		}
 	case ActionUpdate:
-		doc := map[string]interface{}{
-			"doc": r.Data,
-			"doc_as_upsert": true,
+		if len(r.Data) > 1 || (len(r.JoinField) == 0 && len(r.Data) == 1){
+			doc := map[string]interface{}{
+				"doc": r.Data,
+				"doc_as_upsert": true,
+			}
+			data, err = json.Marshal(doc)
+
+			if err != nil {
+				return errors.Trace(err)
+			}
+			buf.Write(data)
+			buf.WriteByte('\n')
+
 		}
-		data, err = json.Marshal(doc)
-		if err != nil {
-			return errors.Trace(err)
+		if len(r.DeleteFields) > 0 {
+			for k := range r.DeleteFields {
+					delReq := new(BulkRequest)
+					delReq.Action = ActionDelete
+					delReq.Type = r.Type
+					delReq.ID = r.ID
+					//delReq.JoinField = r.JoinField
+					//delReq.JoinFieldName = r.JoinFieldName
+					delReq.Index = r.Index
+					delReq.Data = make(map[string]interface{})
+					delReq.Data[k] = true
+
+					fmt.Println(delReq)
+					delReq.bulk(buf)
+			}
 		}
 
-		buf.Write(data)
-		buf.WriteByte('\n')
 	default:
 		//for create and index
 		data, err = json.Marshal(r.Data)

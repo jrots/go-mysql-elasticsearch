@@ -317,7 +317,7 @@ func (r *River) makeReqColumnData(col *schema.TableColumn, value interface{}) in
 		default:
 			return value
 		}
-		if (stringVal == "0000-00-00 00:00:00") {
+		if (stringVal == "0000-00-00 00:00:00" || stringVal == "1970-01-01 01:00:00") {
 			return nil
  		} else {
 			return stringVal
@@ -425,6 +425,7 @@ func (r *River) makeInsertReqData(req *elastic.BulkRequest, rule *Rule, values [
 func (r *River) makeUpdateReqData(req *elastic.BulkRequest, rule *Rule,
 	beforeValues []interface{}, afterValues []interface{}) {
 	req.Data = make(map[string]interface{}, len(beforeValues))
+	req.DeleteFields = make(map[string]interface{}, len(beforeValues))
 
 	// maybe dangerous if something wrong delete before?
 	req.Action = elastic.ActionUpdate
@@ -444,7 +445,9 @@ func (r *River) makeUpdateReqData(req *elastic.BulkRequest, rule *Rule,
 				mapped = true
 				// has custom field mapping
 				v := r.makeReqColumnData(&c, afterValues[i])
+
 				if v == nil {
+					req.DeleteFields[elastic] = true
 					continue
 				}
 				str, ok := v.(string)
@@ -474,7 +477,10 @@ func (r *River) makeUpdateReqData(req *elastic.BulkRequest, rule *Rule,
 		}
 		if mapped == false {
 			v := r.makeReqColumnData(&c, afterValues[i])
-			if (v != nil) {
+
+			if v == nil {
+				req.DeleteFields[c.Name] = true
+			} else {
 				req.Data[c.Name] = v
 			}
 		}
