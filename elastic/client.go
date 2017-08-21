@@ -174,7 +174,6 @@ func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
 					delReq.Data = make(map[string]interface{})
 					delReq.Data[k] = true
 
-					fmt.Println(delReq)
 					delReq.bulk(buf)
 			}
 		}
