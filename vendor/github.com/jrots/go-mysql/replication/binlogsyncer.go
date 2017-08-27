@@ -19,6 +19,7 @@ import (
 
 var (
 	errSyncRunning = errors.New("Sync is running, must Close first")
+	tableMapEvent = false
 )
 
 // BinlogSyncerConfig is the configuration for BinlogSyncer.
@@ -584,6 +585,9 @@ func (b *BinlogSyncer) parseEvent(s *BinlogStreamer, data []byte) error {
 
 	e, err := b.parser.Parse(data)
 	if err != nil {
+		if !tableMapEvent {
+			return nil
+		}
 		return errors.Trace(err)
 	}
 
@@ -596,6 +600,10 @@ func (b *BinlogSyncer) parseEvent(s *BinlogStreamer, data []byte) error {
 		b.nextPos.Name = string(re.NextLogName)
 		b.nextPos.Pos = uint32(re.Position)
 		log.Infof("rotate to %s", b.nextPos)
+	} else if !tableMapEvent {
+		if _, ok := e.Event.(*TableMapEvent); ok {
+			tableMapEvent = true
+		} 
 	}
 
 	needStop := false
