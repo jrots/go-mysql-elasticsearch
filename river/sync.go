@@ -382,6 +382,9 @@ func (r *River) makeInsertReqData(req *elastic.BulkRequest, rule *Rule, values [
 		if !rule.CheckFilter(c.Name) {
 			continue
 		}
+		if i >= len(values) {
+			continue
+		}
 		mapped := false
 		for k, v := range rule.FieldMapping {
 			mysql, elastic, fieldType := r.getFieldParts(k, v)
@@ -441,6 +444,9 @@ func (r *River) makeUpdateReqData(req *elastic.BulkRequest, rule *Rule,
 	for i, c := range rule.TableInfo.Columns {
 		mapped := false
 		if !rule.CheckFilter(c.Name) {
+			continue
+		}
+		if i >= len(beforeValues) || i >= len(afterValues) {
 			continue
 		}
 		if reflect.DeepEqual(beforeValues[i], afterValues[i]) {
