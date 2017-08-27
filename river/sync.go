@@ -27,6 +27,8 @@ const (
 	fieldTypeList = "list"
 	fieldTypeGeoLat = "geo_lat"
 	fieldTypeGeoLon = "geo_lon"
+	fieldTypeNumericBool = "numeric_bool"
+
 )
 
 type posSaver struct {
@@ -317,7 +319,7 @@ func (r *River) makeReqColumnData(col *schema.TableColumn, value interface{}) in
 		default:
 			return value
 		}
-		if (stringVal == "0000-00-00 00:00:00" || stringVal == "1970-01-01 01:00:00") {
+		if stringVal == "0000-00-00 00:00:00" || stringVal == "1970-01-01 01:00:00" || stringVal == "1970-01-01 00:00:00" {
 			return nil
  		} else {
 			return stringVal
@@ -332,7 +334,7 @@ func (r *River) makeReqColumnData(col *schema.TableColumn, value interface{}) in
 		default:
 			return value
 		}
-		if (stringVal == "0000-00-00") {
+		if stringVal == "0000-00-00" {
 			return nil
  		}
 		return stringVal
@@ -395,7 +397,13 @@ func (r *River) makeInsertReqData(req *elastic.BulkRequest, rule *Rule, values [
 					} else {
 						req.Data[elastic] = v
 					}
-				} else if (fieldType == fieldTypeGeoLat || fieldType == fieldTypeGeoLon ){
+				} else if fieldType == fieldTypeNumericBool {
+					boolVal, ok := v.(int64)
+					req.Data[elastic] = 0
+					if ok && boolVal > 0 {
+						req.Data[elastic] = 1
+					}
+				} else if fieldType == fieldTypeGeoLat || fieldType == fieldTypeGeoLon {
 					if _, ok := req.Data[elastic]; !ok {
 						req.Data[elastic] = make(map[string]interface{})
 					}
@@ -451,13 +459,19 @@ func (r *River) makeUpdateReqData(req *elastic.BulkRequest, rule *Rule,
 					continue
 				}
 				str, ok := v.(string)
-				if (fieldType == fieldTypeGeoLat || fieldType == fieldTypeGeoLon ){
+				if fieldType == fieldTypeNumericBool {
+					boolVal, ok := v.(int64)
+					req.Data[elastic] = 0
+					if ok && boolVal > 0 {
+						req.Data[elastic] = 1
+					}
+				} else if fieldType == fieldTypeGeoLat || fieldType == fieldTypeGeoLon {
 					if _, ok := req.Data[elastic]; !ok {
 						req.Data[elastic] = make(map[string]interface{})
 					}
 					md, ok := req.Data[elastic].(map[string]interface{})
-					if (ok){
-						if (fieldType == fieldTypeGeoLat) {
+					if ok {
+						if fieldType == fieldTypeGeoLat {
 							md["lat"] = v
 						} else {
 							md["lon"] = v
