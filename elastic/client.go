@@ -106,12 +106,16 @@ func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
 	} else if len(r.Parent) > 0 {
 		metaData["_parent"] = r.Parent
 	}
+	if r.Action == ActionUpdate || !r.HardCrud {
+		metaData["_retry_on_conflict"] = "4"
+	}
 
 	if r.HardCrud {
 		meta[r.Action] = metaData
 	} else {
 		meta["update"] = metaData // all requests are update in this case
 	}
+
 	data, err := json.Marshal(meta)
 	if err != nil {
 		return errors.Trace(err)
