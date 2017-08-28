@@ -588,7 +588,10 @@ func (b *BinlogSyncer) parseEvent(s *BinlogStreamer, data []byte) error {
 		if !tableMapEvent {
 			return nil
 		}
-		return errors.Trace(err)
+		fmt.Println("got sync error ! ")
+		fmt.Println(err)
+		return nil
+		//return errors.Trace(err)
 	}
 
 	if e.Header.LogPos > 0 {
