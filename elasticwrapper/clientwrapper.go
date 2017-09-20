@@ -1,41 +1,94 @@
-package elastic
+package elasticwrapper
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/juju/errors"
+	elastic "gopkg.in/olivere/elastic.v6"
+//	"os"
+//	"strings"
 )
 
 // Although there are many Elasticsearch clients with Go, I still want to implement one by myself.
 // Because we only need some very simple usages.
 type Client struct {
-	Addr string
-	User string
-	Password string
+	Addr          string
+	User          string
+	Password      string
+//	File		*os.File
+	BulkProcessor *elastic.BulkProcessor
+	BulkProcessorDelete *elastic.BulkProcessor
 
-	c *http.Client
+	totalRequests int
+	c    *elastic.Client
 }
 
 type ClientConfig struct {
-	Addr string
-	User string
+	Addr     string
+	User     string
 	Password string
+}
+
+// after is invoked by bulk processor after every commit.
+// The err variable indicates success or failure.
+func (c *Client) after(id int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
+	if err != nil {
+			fmt.Println(err);
+	}
+	//fmt.Println(response.Took, response.Errors, len(response.Items))
 }
 
 
 func NewClient(conf *ClientConfig) *Client {
-	c := new(Client)
 
+	c := new(Client)
+/*
+	updates, err := os.OpenFile("./updatesfile", os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+    	panic(err)
+	}
+	c.File = updates
+*/
 	c.Addr = conf.Addr
 	c.User = conf.User
 	c.Password = conf.Password
+	client, err := elastic.NewClient(
+		elastic.SetURL(	"http://elastic30:9200",
+			  			"http://elastic31:9200"))
 
-	c.c = &http.Client{}
+	if err != nil {
+		panic(err)
+	}
+	c.c = client
+	c.totalRequests = 0
+	bulk, err := c.c.BulkProcessor().Name("MyBackgroundWorker-1").
+		Workers(3).
+		BulkActions(50).               // commit if # requests >= 1000
+		BulkSize(40 << 20).               // commit if size of requests >= 2 MB
+		FlushInterval(120 * time.Second). // commit every 30s
+		After(c.after).
+		Do(context.Background())
+	if err == nil {
+		c.BulkProcessor = bulk
+	}
+
+	bulkDel, err := c.c.BulkProcessor().Name("DeleteWorker-1").
+		Workers(2).
+		BulkActions(10).               // commit if # requests >= 1000
+		BulkSize(5 << 20).               // commit if size of requests >= 2 MB
+		FlushInterval(20 * time.Second). // commit every 10s
+		After(c.after).
+		Do(context.Background())
+	if err == nil {
+		c.BulkProcessorDelete = bulkDel
+	}
 
 	return c
 }
@@ -63,137 +116,92 @@ const (
 )
 
 type BulkRequest struct {
-	Action string
-	Index  string
-	Type   string
-	ID     string
-	Parent string
-	JoinField string
+	Action        string
+	Index         string
+	Type          string
+	ID            string
+	Parent        string
+	JoinField     string
 	JoinFieldName string
 
 	HardCrud bool
+	Initial bool
 
-	Data map[string]interface{}
+	Data         map[string]interface{}
 	DeleteFields map[string]interface{}
-
 }
 
-func (r *BulkRequest) bulk(buf *bytes.Buffer) error {
-	meta := make(map[string]map[string]string)
-	metaData := make(map[string]string)
+func (r *BulkRequest) prepareBulkUpdateRequest() (*elastic.BulkUpdateRequest, error) {
+
+	bulkRequest := elastic.NewBulkUpdateRequest()
+	/*update2Req := elastic.NewBulkUpdateRequest().Index("twoo_prod_1").Type("doc").Id("3").
+	RetryOnConflict(2).DocAsUpsert(true).
+	Doc(doc)
+	*/
 	if len(r.Index) > 0 {
-		metaData["_index"] = r.Index
+		bulkRequest.Index(r.Index)
 	}
 	if len(r.Type) > 0 {
-		metaData["_type"] = r.Type
+		bulkRequest.Type(r.Type)
 	}
 
 	if len(r.ID) > 0 {
-		metaData["_id"] = r.ID
+		bulkRequest.Id(r.ID)
 	}
 	if len(r.JoinField) > 0 {
 		if len(r.Parent) > 0 {
 			r.Data[r.JoinField] = map[string]interface{}{
-				"name" : r.JoinFieldName,
-				"parent" : r.Parent,
+				"name":   r.JoinFieldName,
+				"parent": r.Parent,
 			}
-			metaData["_routing"] = r.Parent
-		} else {
+			bulkRequest.Routing(r.Parent)
+		} else if r.Initial {
 			r.Data[r.JoinField] = map[string]interface{}{
-				"name" : r.JoinFieldName,
+				"name": r.JoinFieldName,
 			}
 		}
 	} else if len(r.Parent) > 0 {
-		metaData["_parent"] = r.Parent
+		bulkRequest.Parent(r.Parent)
 	}
 	if r.Action == ActionUpdate || !r.HardCrud {
-		metaData["_retry_on_conflict"] = "4"
+		bulkRequest.RetryOnConflict(2)
 	}
-
+	/* @TODO fix hardcrud seperate actions!
 	if r.HardCrud {
 		meta[r.Action] = metaData
 	} else {
 		meta["update"] = metaData // all requests are update in this case
 	}
+	*/
 
-	data, err := json.Marshal(meta)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if r.Action != ActionUpdate || (len(r.Data) > 1 || (len(r.JoinField) == 0 && len(r.Data) == 1)) {
-
-		buf.Write(data)
-		buf.WriteByte('\n')
-	}
+	doc := map[string]interface{}{}
 
 	switch r.Action {
 	case ActionDelete:
 		if !r.HardCrud {
 			var del bytes.Buffer
-			for k := range r.Data {
-				del.WriteString("ctx._source.remove(\"")
-				del.WriteString(k)
-				del.WriteString("\");")
-			}
-			delScript := map[string]interface{}{
-						"inline" : del.String(),
-						"lang" : "painless",
-					}
-			script := map[string]interface{}{
-				"script": delScript,
-			}
-
-			data, err = json.Marshal(script)
-			if err != nil {
-				return errors.Trace(err)
-			}
-
-			buf.Write(data)
-			buf.WriteByte('\n')
+			del.WriteString("for (entry in params.entrySet()) { ctx._source.remove(entry.getKey()) }")
+			bulkRequest.Script(elastic.NewScriptInline(del.String()).Type("source").Lang("painless").Params(r.Data))
+			return bulkRequest, nil
 		}
 	case ActionUpdate:
-		if len(r.Data) > 1 || (len(r.JoinField) == 0 && len(r.Data) == 1){
-			doc := map[string]interface{}{
-				"doc": r.Data,
-				"doc_as_upsert": true,
-			}
-			data, err = json.Marshal(doc)
-
-			if err != nil {
-				return errors.Trace(err)
-			}
-			buf.Write(data)
-			buf.WriteByte('\n')
-
-		}
-		if len(r.DeleteFields) > 0 {
-			for k := range r.DeleteFields {
-					delReq := new(BulkRequest)
-					delReq.Action = ActionDelete
-					delReq.Type = r.Type
-					delReq.ID = r.ID
-					//delReq.JoinField = r.JoinField
-					//delReq.JoinFieldName = r.JoinFieldName
-					delReq.Index = r.Index
-					delReq.Data = make(map[string]interface{})
-					delReq.Data[k] = true
-
-					delReq.bulk(buf)
-			}
+		// When more then 1 item to update
+		// When no parent and not initial data
+		if len(r.Data) > 1 || (len(r.Parent) == 0 && len(r.Data) == 1 && !r.Initial)  {
+			doc = r.Data
 		}
 
 	default:
-		//for create and index
-		data, err = json.Marshal(r.Data)
-		if err != nil {
-			return errors.Trace(err)
-		}
 
-		buf.Write(data)
-		buf.WriteByte('\n')
+		doc = r.Data
 	}
 
-	return nil
+	if len(doc) > 0 {
+		bulkRequest.DocAsUpsert(true)
+		return bulkRequest.Doc(doc), nil
+	} else {
+		return bulkRequest, errors.New("empty update")
+	}
 }
 
 type BulkResponse struct {
@@ -224,9 +232,9 @@ func (c *Client) DoRequest(method string, url string, body *bytes.Buffer) (*http
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.c.Do(req)
-
-	return resp, err
+//	resp, err := c.c.Do(req)
+	//@TODO fix
+	return &http.Response{}, err
 }
 
 func (c *Client) Do(method string, url string, body map[string]interface{}) (*Response, error) {
@@ -259,36 +267,53 @@ func (c *Client) Do(method string, url string, body map[string]interface{}) (*Re
 	return ret, errors.Trace(err)
 }
 
-func (c *Client) DoBulk(url string, items []*BulkRequest) (*BulkResponse, error) {
-	var buf bytes.Buffer
+func (c *Client) OutputStats() {
 
+	stats := c.BulkProcessor.Stats()
+
+	fmt.Printf("Number of times flush has been invoked: %d\n", stats.Flushed)
+	fmt.Printf("Number of times workers committed reqs: %d\n", stats.Committed)
+	fmt.Printf("Number of requests indexed            : %d\n", stats.Indexed)
+	fmt.Printf("Number of requests reported as created: %d\n", stats.Created)
+	fmt.Printf("Number of requests reported as updated: %d\n", stats.Updated)
+	fmt.Printf("Number of requests reported as success: %d\n", stats.Succeeded)
+	fmt.Printf("Number of requests reported as failed : %d\n", stats.Failed)
+}
+
+func (c *Client) DoBulk(url string, items []*BulkRequest) (*BulkResponse, error) {
+	var bulkRequest *elastic.BulkUpdateRequest
+	var err error
 	for _, item := range items {
-		if err := item.bulk(&buf); err != nil {
-			return nil, errors.Trace(err)
+
+		if bulkRequest, err = item.prepareBulkUpdateRequest(); err == nil {
+			if item.Action == ActionDelete {
+				c.totalRequests = c.totalRequests+1
+				c.BulkProcessorDelete.Add(bulkRequest)
+			} else {
+				c.totalRequests = c.totalRequests+1
+				c.BulkProcessor.Add(bulkRequest)
+			}
+		}
+
+		if len(item.DeleteFields) > 0 {
+			for k := range item.DeleteFields {
+				delReq := new(BulkRequest)
+				delReq.Action = ActionDelete
+				delReq.Type = item.Type
+				delReq.ID = item.ID
+				delReq.Index = item.Index
+				delReq.Data = make(map[string]interface{})
+				delReq.Data[k] = true
+
+				if bulkRequest, err = delReq.prepareBulkUpdateRequest(); err == nil {
+					c.BulkProcessorDelete.Add(bulkRequest)
+					c.totalRequests = c.totalRequests+1
+				}
+			}
 		}
 	}
 
-	resp, err := c.DoRequest("POST", url, &buf)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	defer resp.Body.Close()
-
-	ret := new(BulkResponse)
-	ret.Code = resp.StatusCode
-
-	data, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	if len(data) > 0 {
-		err = json.Unmarshal(data, &ret)
-	}
-
-
-	return ret, errors.Trace(err)
+	return &BulkResponse{}, nil
 }
 
 func (c *Client) CreateMapping(index string, docType string, mapping map[string]interface{}) error {

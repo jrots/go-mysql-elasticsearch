@@ -10,7 +10,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/jrots/go-mysql-elasticsearch/elastic"
+	"github.com/jrots/go-mysql-elasticsearch/elasticwrapper"
 	"github.com/jrots/go-mysql/canal"
 	"github.com/jrots/go-mysql/mysql"
 	"github.com/jrots/go-mysql/replication"
@@ -66,7 +66,7 @@ func (h *eventHandler) OnRow(e *canal.RowsEvent) error {
 	if !ok {
 		return nil
 	}
-	var reqs []*elastic.BulkRequest
+	var reqs []*elasticwrapper.BulkRequest
 	var err error
 	switch e.Action {
 	case canal.InsertAction:
@@ -109,7 +109,7 @@ func (r *River) syncLoop() {
 	defer r.wg.Done()
 
 	lastSavedTime := time.Now()
-	reqs := make([]*elastic.BulkRequest, 0, 1024)
+	reqs := make([]*elasticwrapper.BulkRequest, 0, 1024)
 
 	var pos mysql.Position
 
@@ -128,7 +128,7 @@ func (r *River) syncLoop() {
 					needSavePos = true
 					pos = v.pos
 				}
-			case []*elastic.BulkRequest:
+			case []*elasticwrapper.BulkRequest:
 				reqs = append(reqs, v...)
 				needFlush = len(reqs) >= bulkSize
 			}
@@ -159,8 +159,8 @@ func (r *River) syncLoop() {
 }
 
 // for insert and delete
-func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]*elastic.BulkRequest, error) {
-	reqs := make([]*elastic.BulkRequest, 0, len(rows))
+func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]*elasticwrapper.BulkRequest, error) {
+	reqs := make([]*elasticwrapper.BulkRequest, 0, len(rows))
 
 	for _, values := range rows {
 		id, err := r.getDocID(rule, values)
@@ -175,7 +175,7 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 			}
 		}
 
-		req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: id, Parent: parentID}
+		req := &elasticwrapper.BulkRequest{Index: rule.Index, Type: rule.Type, ID: id, Parent: parentID}
 
 		if len(rule.IdPrefix) > 0 {
 			req.ID = rule.IdPrefix + ":" + req.ID
@@ -193,15 +193,16 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 			if !rule.HardCrud {
 				r.makeInsertReqData(req, rule, values)
 			}
-			req.Action = elastic.ActionDelete
+			req.Action = elasticwrapper.ActionDelete
 			r.st.DeleteNum.Add(1)
 		} else {
 			r.makeInsertReqData(req, rule, values)
 			if rule.HardCrud {
-				req.Action = elastic.ActionIndex
+				req.Action = elasticwrapper.ActionIndex
 			} else {
-				req.Action = elastic.ActionUpdate //upsert in this case (don't override complete document with the data)
+				req.Action = elasticwrapper.ActionUpdate //upsert in this case (don't override complete document with the data)
 			}
+			req.Initial = true
 			r.st.InsertNum.Add(1)
 		}
 
@@ -211,20 +212,20 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 	return reqs, nil
 }
 
-func (r *River) makeInsertRequest(rule *Rule, rows [][]interface{}) ([]*elastic.BulkRequest, error) {
+func (r *River) makeInsertRequest(rule *Rule, rows [][]interface{}) ([]*elasticwrapper.BulkRequest, error) {
 	return r.makeRequest(rule, canal.InsertAction, rows)
 }
 
-func (r *River) makeDeleteRequest(rule *Rule, rows [][]interface{}) ([]*elastic.BulkRequest, error) {
+func (r *River) makeDeleteRequest(rule *Rule, rows [][]interface{}) ([]*elasticwrapper.BulkRequest, error) {
 	return r.makeRequest(rule, canal.DeleteAction, rows)
 }
 
-func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.BulkRequest, error) {
+func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elasticwrapper.BulkRequest, error) {
 	if len(rows)%2 != 0 {
 		return nil, errors.Errorf("invalid update rows event, must have 2x rows, but %d", len(rows))
 	}
 
-	reqs := make([]*elastic.BulkRequest, 0, len(rows))
+	reqs := make([]*elasticwrapper.BulkRequest, 0, len(rows))
 
 	for i := 0; i < len(rows); i += 2 {
 		beforeID, err := r.getDocID(rule, rows[i])
@@ -242,7 +243,7 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 			return nil, errors.Trace(err)
 		}
 		// Simplify .. no support for changing PK of rows as this would complicate things too much
-		req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: beforeID, Parent: beforeParentID, HardCrud: rule.HardCrud}
+		req := &elasticwrapper.BulkRequest{Index: rule.Index, Type: rule.Type, ID: beforeID, Parent: beforeParentID, HardCrud: rule.HardCrud}
 
 		if len(rule.IdPrefix) > 0 {
 			req.ID = rule.IdPrefix + ":" + req.ID
@@ -359,23 +360,23 @@ func (r *River) getFieldParts(k string, v string) (string, string, string) {
 	composedField := strings.Split(v, ",")
 
 	mysql := k
-	elastic := composedField[0]
+	elasticwrapper := composedField[0]
 	fieldType := ""
 
-	if 0 == len(elastic) {
-		elastic = mysql
+	if 0 == len(elasticwrapper) {
+		elasticwrapper = mysql
 	}
 	if 2 == len(composedField) {
 		fieldType = composedField[1]
 	}
 
-	return mysql, elastic, fieldType
+	return mysql, elasticwrapper, fieldType
 }
 
-func (r *River) makeInsertReqData(req *elastic.BulkRequest, rule *Rule, values []interface{}) {
+func (r *River) makeInsertReqData(req *elasticwrapper.BulkRequest, rule *Rule, values []interface{}) {
 	req.Data = make(map[string]interface{}, len(values))
 	if !rule.HardCrud {
-		req.Action = elastic.ActionUpdate
+		req.Action = elasticwrapper.ActionUpdate
 	}
 
 	for i, c := range rule.TableInfo.Columns {
@@ -387,7 +388,7 @@ func (r *River) makeInsertReqData(req *elastic.BulkRequest, rule *Rule, values [
 		}
 		mapped := false
 		for k, v := range rule.FieldMapping {
-			mysql, elastic, fieldType := r.getFieldParts(k, v)
+			mysql, elasticwrapper, fieldType := r.getFieldParts(k, v)
 			if mysql == c.Name {
 				mapped = true
 				v := r.makeReqColumnData(&c, values[i])
@@ -396,31 +397,31 @@ func (r *River) makeInsertReqData(req *elastic.BulkRequest, rule *Rule, values [
 				}
 				if fieldType == fieldTypeList {
 					if str, ok := v.(string); ok {
-						req.Data[elastic] = strings.Split(str, ",")
+						req.Data[elasticwrapper] = strings.Split(str, ",")
 					} else {
-						req.Data[elastic] = v
+						req.Data[elasticwrapper] = v
 					}
 				} else if fieldType == fieldTypeNumericBool {
 					boolVal, ok := v.(int64)
-					req.Data[elastic] = 0
+					req.Data[elasticwrapper] = 0
 					if ok && boolVal > 0 {
-						req.Data[elastic] = 1
+						req.Data[elasticwrapper] = 1
 					}
 				} else if fieldType == fieldTypeGeoLat || fieldType == fieldTypeGeoLon {
-					if _, ok := req.Data[elastic]; !ok {
-						req.Data[elastic] = make(map[string]interface{})
+					if _, ok := req.Data[elasticwrapper]; !ok {
+						req.Data[elasticwrapper] = make(map[string]interface{})
 					}
-					md, ok := req.Data[elastic].(map[string]interface{})
+					md, ok := req.Data[elasticwrapper].(map[string]interface{})
 					if (ok){
 						if (fieldType == fieldTypeGeoLat) {
 							md["lat"] = v
 						} else {
 							md["lon"] = v
 						}
-						req.Data[elastic] = md
+						req.Data[elasticwrapper] = md
 					}
 				} else {
-					req.Data[elastic] = v
+					req.Data[elasticwrapper] = v
 				}
 			}
 		}
@@ -433,13 +434,13 @@ func (r *River) makeInsertReqData(req *elastic.BulkRequest, rule *Rule, values [
 	}
 }
 
-func (r *River) makeUpdateReqData(req *elastic.BulkRequest, rule *Rule,
+func (r *River) makeUpdateReqData(req *elasticwrapper.BulkRequest, rule *Rule,
 	beforeValues []interface{}, afterValues []interface{}) {
 	req.Data = make(map[string]interface{}, len(beforeValues))
 	req.DeleteFields = make(map[string]interface{}, len(beforeValues))
 
 	// maybe dangerous if something wrong delete before?
-	req.Action = elastic.ActionUpdate
+	req.Action = elasticwrapper.ActionUpdate
 
 	for i, c := range rule.TableInfo.Columns {
 		mapped := false
@@ -454,43 +455,43 @@ func (r *River) makeUpdateReqData(req *elastic.BulkRequest, rule *Rule,
 			continue
 		}
 		for k, v := range rule.FieldMapping {
-			mysql, elastic, fieldType := r.getFieldParts(k, v)
+			mysql, elasticwrapper, fieldType := r.getFieldParts(k, v)
 			if mysql == c.Name {
 				mapped = true
 				// has custom field mapping
 				v := r.makeReqColumnData(&c, afterValues[i])
 
 				if v == nil {
-					req.DeleteFields[elastic] = true
+					req.DeleteFields[elasticwrapper] = true
 					continue
 				}
 				str, ok := v.(string)
 				if fieldType == fieldTypeNumericBool {
-					boolVal, ok := v.(int64)
-					req.Data[elastic] = 0
+					boolVal, ok := v.(int32)
+					req.Data[elasticwrapper] = 0
 					if ok && boolVal > 0 {
-						req.Data[elastic] = 1
+						req.Data[elasticwrapper] = 1
 					}
 				} else if fieldType == fieldTypeGeoLat || fieldType == fieldTypeGeoLon {
-					if _, ok := req.Data[elastic]; !ok {
-						req.Data[elastic] = make(map[string]interface{})
+					if _, ok := req.Data[elasticwrapper]; !ok {
+						req.Data[elasticwrapper] = make(map[string]interface{})
 					}
-					md, ok := req.Data[elastic].(map[string]interface{})
+					md, ok := req.Data[elasticwrapper].(map[string]interface{})
 					if ok {
 						if fieldType == fieldTypeGeoLat {
 							md["lat"] = v
 						} else {
 							md["lon"] = v
 						}
-						req.Data[elastic] = md
+						req.Data[elasticwrapper] = md
 					}
 				} else if ok == false {
-					req.Data[elastic] = v
+					req.Data[elasticwrapper] = v
 				} else {
 					if fieldType == fieldTypeList {
-						req.Data[elastic] = strings.Split(str, ",")
+						req.Data[elasticwrapper] = strings.Split(str, ",")
 					} else {
-						req.Data[elastic] = str
+						req.Data[elasticwrapper] = str
 					}
 				}
 			}
@@ -555,7 +556,7 @@ func (r *River) getParentID(rule *Rule, row []interface{}, columnName string) (s
 	return fmt.Sprint(row[index]), nil
 }
 
-func (r *River) doBulk(reqs []*elastic.BulkRequest) error {
+func (r *River) doBulk(reqs []*elasticwrapper.BulkRequest) error {
 	if len(reqs) == 0 {
 		return nil
 	}

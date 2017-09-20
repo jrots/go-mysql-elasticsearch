@@ -1,4 +1,4 @@
-package elastic
+package elasticwrapper
 
 import (
 	"flag"

@@ -7,7 +7,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/jrots/go-mysql-elasticsearch/elastic"
+	"github.com/jrots/go-mysql-elasticsearch/elasticwrapper"
 	"github.com/jrots/go-mysql/canal"
 	"golang.org/x/net/context"
 )
@@ -27,7 +27,7 @@ type River struct {
 
 	wg sync.WaitGroup
 
-	es *elastic.Client
+	es *elasticwrapper.Client
 
 	st *stat
 
@@ -66,11 +66,11 @@ func NewRiver(c *Config) (*River, error) {
 		return nil, errors.Trace(err)
 	}
 
-	cfg := new(elastic.ClientConfig)
+	cfg := new(elasticwrapper.ClientConfig)
 	cfg.Addr = r.c.ESAddr
 	cfg.User = r.c.ESUser
 	cfg.Password = r.c.ESPassword
-	r.es = elastic.NewClient(cfg)
+	r.es = elasticwrapper.NewClient(cfg)
 
 	r.st = &stat{r: r}
 	go r.st.Run(r.c.StatAddr)
@@ -270,6 +270,8 @@ func (r *River) Ctx() context.Context {
 
 func (r *River) Close() {
 	log.Infof("closing river")
+
+	r.es.BulkProcessor.Close()
 
 	r.cancel()
 
