@@ -60,8 +60,7 @@ func NewClient(conf *ClientConfig) *Client {
 	c.User = conf.User
 	c.Password = conf.Password
 	client, err := elastic.NewClient(
-		elastic.SetURL(	"http://elastic30:9200",
-			  			"http://elastic31:9200"))
+		elastic.SetURL(	c.Addr ))
 
 	if err != nil {
 		panic(err)
