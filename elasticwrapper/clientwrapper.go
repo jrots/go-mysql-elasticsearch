@@ -68,8 +68,8 @@ func NewClient(conf *ClientConfig) *Client {
 	c.c = client
 	c.totalRequests = 0
 	bulk, err := c.c.BulkProcessor().Name("MyBackgroundWorker-1").
-		Workers(3).
-		BulkActions(50).               // commit if # requests >= 1000
+		Workers(1).
+		BulkActions(75).               // commit if # requests >= 1000
 		BulkSize(40 << 20).               // commit if size of requests >= 2 MB
 		FlushInterval(120 * time.Second). // commit every 30s
 		After(c.after).
@@ -77,7 +77,7 @@ func NewClient(conf *ClientConfig) *Client {
 	if err == nil {
 		c.BulkProcessor = bulk
 	}
-
+	/*
 	bulkDel, err := c.c.BulkProcessor().Name("DeleteWorker-1").
 		Workers(2).
 		BulkActions(10).               // commit if # requests >= 1000
@@ -87,7 +87,7 @@ func NewClient(conf *ClientConfig) *Client {
 		Do(context.Background())
 	if err == nil {
 		c.BulkProcessorDelete = bulkDel
-	}
+	}*/
 
 	return c
 }
@@ -287,7 +287,7 @@ func (c *Client) DoBulk(url string, items []*BulkRequest) (*BulkResponse, error)
 		if bulkRequest, err = item.prepareBulkUpdateRequest(); err == nil {
 			if item.Action == ActionDelete {
 				c.totalRequests = c.totalRequests+1
-				c.BulkProcessorDelete.Add(bulkRequest)
+				c.BulkProcessor.Add(bulkRequest)
 			} else {
 				c.totalRequests = c.totalRequests+1
 				c.BulkProcessor.Add(bulkRequest)
@@ -305,7 +305,7 @@ func (c *Client) DoBulk(url string, items []*BulkRequest) (*BulkResponse, error)
 				delReq.Data[k] = true
 
 				if bulkRequest, err = delReq.prepareBulkUpdateRequest(); err == nil {
-					c.BulkProcessorDelete.Add(bulkRequest)
+					c.BulkProcessor.Add(bulkRequest)
 					c.totalRequests = c.totalRequests+1
 				}
 			}
