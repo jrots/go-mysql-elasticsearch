@@ -62,6 +62,10 @@ func NewCanal(cfg *Config) (*Canal, error) {
 		return nil, errors.Trace(err)
 	}
 
+	if c.cfg.SkipSync {
+		return c, nil
+	}
+
 	if err = c.prepareSyncer(); err != nil {
 		return nil, errors.Trace(err)
 	}

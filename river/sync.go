@@ -181,6 +181,10 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 			req.ID = rule.IdPrefix + ":" + req.ID
 		}
 
+		if rule.ConcatField != "" {
+			req.ListRequest = true
+		}
+
 		if len(rule.JoinField) > 0 {
 			req.JoinField = rule.JoinField
 		}
@@ -244,6 +248,10 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elasticw
 		}
 		// Simplify .. no support for changing PK of rows as this would complicate things too much
 		req := &elasticwrapper.BulkRequest{Index: rule.Index, Type: rule.Type, ID: beforeID, Parent: beforeParentID, HardCrud: rule.HardCrud}
+
+		if rule.ConcatField != "" {
+			req.ListRequest = true
+		}
 
 		if len(rule.IdPrefix) > 0 {
 			req.ID = rule.IdPrefix + ":" + req.ID
@@ -378,6 +386,10 @@ func (r *River) makeInsertReqData(req *elasticwrapper.BulkRequest, rule *Rule, v
 	if !rule.HardCrud {
 		req.Action = elasticwrapper.ActionUpdate
 	}
+	concatField := bytes.NewBufferString("")
+	if rule.ConcatField != "" {
+		concatField.WriteString(rule.ConcatPrefix)
+	}
 
 	for i, c := range rule.TableInfo.Columns {
 		if !rule.CheckFilter(c.Name) {
@@ -427,11 +439,20 @@ func (r *River) makeInsertReqData(req *elasticwrapper.BulkRequest, rule *Rule, v
 		}
 		if mapped == false {
 			v := r.makeReqColumnData(&c, values[i])
-			if (v != nil) {
-				req.Data[c.Name] = v
+			if v != nil {
+				if rule.ConcatField != "" {
+					concatField.WriteString("_")
+					concatField.WriteString(fmt.Sprint(v))
+				} else {
+					req.Data[c.Name] = v
+				}
 			}
 		}
 	}
+	if rule.ConcatField != "" {
+		req.Data[rule.ConcatField] = concatField.String()
+	}
+
 }
 
 func (r *River) makeUpdateReqData(req *elasticwrapper.BulkRequest, rule *Rule,
@@ -441,6 +462,10 @@ func (r *River) makeUpdateReqData(req *elasticwrapper.BulkRequest, rule *Rule,
 
 	// maybe dangerous if something wrong delete before?
 	req.Action = elasticwrapper.ActionUpdate
+	concatField := bytes.NewBufferString("")
+	if rule.ConcatField != "" {
+		concatField.WriteString(rule.ConcatPrefix)
+	}
 
 	for i, c := range rule.TableInfo.Columns {
 		mapped := false
@@ -502,10 +527,17 @@ func (r *River) makeUpdateReqData(req *elasticwrapper.BulkRequest, rule *Rule,
 			if v == nil {
 				req.DeleteFields[c.Name] = true
 			} else {
-				req.Data[c.Name] = v
+				if rule.ConcatField != "" {
+					concatField.WriteString("_")
+					concatField.WriteString(fmt.Sprint(v))
+				} else {
+					req.Data[c.Name] = v
+				}
 			}
 		}
-
+	}
+	if rule.ConcatField != "" {
+		req.Data[rule.ConcatField] = concatField.String()
 	}
 }
 

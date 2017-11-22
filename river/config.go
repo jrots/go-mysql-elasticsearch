@@ -31,6 +31,8 @@ type Config struct {
 
 	DumpExec       string `toml:"mysqldump"`
 	SkipMasterData bool   `toml:"skip_master_data"`
+	SkipSync bool `toml:"skip_sync"`
+
 	BinlogName string   `toml:"binlogname"`
 
 	Sources []SourceConfig `toml:"source"`

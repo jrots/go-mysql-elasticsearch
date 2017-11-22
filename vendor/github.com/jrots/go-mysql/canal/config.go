@@ -41,6 +41,7 @@ type Config struct {
 	ServerID uint32 `toml:"server_id"`
 	Flavor   string `toml:"flavor"`
 	BinlogName string `toml:"binlogname"`
+	SkipSync bool `toml:"skip_sync"`
 
 	Dump DumpConfig `toml:"dump"`
 }

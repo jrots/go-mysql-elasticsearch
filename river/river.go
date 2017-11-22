@@ -86,6 +86,7 @@ func (r *River) newCanal() error {
 	cfg.Charset = r.c.MyCharset
 	cfg.Flavor = r.c.Flavor
 	cfg.BinlogName = r.c.BinlogName
+	cfg.SkipSync = r.c.SkipSync
 
 	cfg.ServerID = r.c.ServerID
 	cfg.Dump.ExecutionPath = r.c.DumpExec

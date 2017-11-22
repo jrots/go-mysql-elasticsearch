@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	elastic "gopkg.in/olivere/elastic.v6"
+	elastic "github.com/olivere/elastic"
 //	"os"
 //	"strings"
 )
@@ -71,7 +71,7 @@ func NewClient(conf *ClientConfig) *Client {
 		Workers(1).
 		BulkActions(75).               // commit if # requests >= 1000
 		BulkSize(40 << 20).               // commit if size of requests >= 2 MB
-		FlushInterval(120 * time.Second). // commit every 30s
+		FlushInterval(30 * time.Second). // commit every 30s
 		After(c.after).
 		Do(context.Background())
 	if err == nil {
@@ -125,6 +125,7 @@ type BulkRequest struct {
 
 	HardCrud bool
 	Initial bool
+	ListRequest bool
 
 	Data         map[string]interface{}
 	DeleteFields map[string]interface{}
@@ -165,7 +166,7 @@ func (r *BulkRequest) prepareBulkUpdateRequest() (*elastic.BulkUpdateRequest, er
 	if r.Action == ActionUpdate || !r.HardCrud {
 		bulkRequest.RetryOnConflict(2)
 	}
-	/* @TODO fix hardcrud seperate actions!
+	/* @TODO fix hardcrud separate actions!
 	if r.HardCrud {
 		meta[r.Action] = metaData
 	} else {
@@ -174,14 +175,28 @@ func (r *BulkRequest) prepareBulkUpdateRequest() (*elastic.BulkUpdateRequest, er
 	*/
 
 	doc := map[string]interface{}{}
+	if r.ListRequest {
+		for listKey, _ := range r.Data {
+			r.Data["key"] = listKey
+			break
+		}
+	}
 
 	switch r.Action {
 	case ActionDelete:
 		if !r.HardCrud {
-			var del bytes.Buffer
-			del.WriteString("for (entry in params.entrySet()) { ctx._source.remove(entry.getKey()) }")
-			bulkRequest.Script(elastic.NewScriptInline(del.String()).Type("source").Lang("painless").Params(r.Data))
-			return bulkRequest, nil
+			if r.ListRequest {
+				bulkRequest.Script(elastic.NewScriptStored("remove_from_list").Params(r.Data)).
+					Upsert(map[string]interface{}{}).
+					ScriptedUpsert(true)
+
+				return bulkRequest, nil
+			} else {
+				bulkRequest.Script(elastic.NewScriptStored("remove_from_source").Params(r.Data)).
+					Upsert(map[string]interface{}{}).
+					ScriptedUpsert(true)
+				return bulkRequest, nil
+			}
 		}
 	case ActionUpdate:
 		// When more then 1 item to update
@@ -189,10 +204,15 @@ func (r *BulkRequest) prepareBulkUpdateRequest() (*elastic.BulkUpdateRequest, er
 		if len(r.Data) > 1 || (len(r.Parent) == 0 && len(r.Data) == 1 && !r.Initial)  {
 			doc = r.Data
 		}
-
 	default:
-
 		doc = r.Data
+	}
+
+	if r.ListRequest {
+		bulkRequest.Script(elastic.NewScriptStored("add_to_list").Params(r.Data)).
+		Upsert(map[string]interface{}{}).
+		ScriptedUpsert(true)
+		return bulkRequest, nil
 	}
 
 	if len(doc) > 0 {
@@ -285,13 +305,8 @@ func (c *Client) DoBulk(url string, items []*BulkRequest) (*BulkResponse, error)
 	for _, item := range items {
 
 		if bulkRequest, err = item.prepareBulkUpdateRequest(); err == nil {
-			if item.Action == ActionDelete {
-				c.totalRequests = c.totalRequests+1
-				c.BulkProcessor.Add(bulkRequest)
-			} else {
-				c.totalRequests = c.totalRequests+1
-				c.BulkProcessor.Add(bulkRequest)
-			}
+			c.totalRequests = c.totalRequests+1
+			c.BulkProcessor.Add(bulkRequest)
 		}
 
 		if len(item.DeleteFields) > 0 {
